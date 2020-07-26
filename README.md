@@ -1,4 +1,4 @@
-# Autopatch
+# Autopatch v1.01
 
 Retrieve patches from the versacode API and automatically apply them to your versacode software.
 
@@ -42,6 +42,11 @@ The `$config` parameter can be setup to avoid providing details interactively. T
 | MYSQL_DATABASE | MySQL database name | - |
 | MYSQL_PASSWORD | MySQL database user password | - |
 
+You can pass any of these config parameters as command line arguments. Example:
+
+```
+php autopatch.php DIRECTORY_PATH=/var/www/html/
+```
 
 ### License
 

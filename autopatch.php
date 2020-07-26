@@ -20,7 +20,7 @@ LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 */
-/* Autopatch v1.0 */
+/* Autopatch v1.01 */
 $config = array(
 "API_SERVER" => "https://account.versacode.org/api/", //versacode API server end-point
 /*
@@ -46,6 +46,18 @@ $config = array(
 	"MYSQL_PASSWORD" => "",
 	*/
 );
+function ParseConfig($arg)
+{
+	if (strpos($arg, "=") !== false)
+	{
+		$data = explode("=", $arg);
+		SetConfig(strtoupper($data[0]), $data[1]);
+	}
+}
+for ($i = 1; $i < count($argv); $i++)
+{
+	ParseConfig($argv[$i]);
+}
 class Helper {
 	private $foreground = array();
 	private $background = array();
@@ -315,7 +327,7 @@ askOption:
 		goto askOption;
 	}
 	/* Get directory where the patches apply */
-	$directory = "";
+	$directory = GetConfig("DIRECTORY_PATH", "path to target directory");
 	while (!is_dir($directory)) //Insist on a valid directory path
 	{
 		SetConfig("DIRECTORY_PATH", "");
