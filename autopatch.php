@@ -20,9 +20,10 @@ LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 */
-/* Autopatch v1.01 */
+/* Autopatch v1.02 */
 $config = array(
 "API_SERVER" => "https://account.versacode.org/api/", //versacode API server end-point
+"HISTORY_DIRECTORY" => "~/.autopatchvc/",
 /*
 	"API_KEY" => "", //your API key here
 	"PROJECT_ID" => "", //project ID
@@ -158,6 +159,8 @@ function GetConfig($variable, $desc = false)
 	global $config;
 	if (!isset($config[$variable]))
 		SetConfig($variable, Prompt("Enter " . ($desc? $desc : $variable)));
+	if (strtolower($config[$variable]) == "n" || strtolower($config[$variable]) == "no")
+		$config[$variable] = false;
 	return $config[$variable];
 }
 function SendRequest($endpoint, $module)
@@ -184,6 +187,11 @@ function GetHistory($module)
 {
 	status("Retrieving available patches...", "blue");
 	return GetAPIResponse(SendRequest("history/".GetConfig("PROJECT_ID", "Project ID"), $module));
+}
+function ParseDirectory($dir)
+{
+	$home_dir = strtoupper(substr(PHP_OS, 0, 3)) === 'WIN'? getenv("HOMEPATH") : getenv("HOME");
+	return realpath(str_replace("~", $home_dir, $dir));
 }
 function ExecuteCmd($cmd)
 {
@@ -260,7 +268,7 @@ function ProcessSQLFiles($db_files, $db_directory)
 {
 	foreach ($db_files as $key => $file)
 	{
-		if (strtolower(substr($file, -4)) == ".sql" && GetConfig("APPLY_SQL", "preference to automatically apply SQL files (saved inside /database/) [Y/*]"))
+		if (strtolower(substr($file, -4)) == ".sql" && GetConfig("APPLY_SQL", "preference to automatically apply SQL files (saved inside /database/) [Y/N]"))
 		{
 			status("DISCLAIMER: You have chosen to automatically allow SQL imports. Note that this script does not take backups and cannot revert your database to the state it was prior to applying the patch. It is recommended to take a backup now if you have not yet. Type 'YES' if you are sure you would still like to proceed.", "black", "yellow");
 			if (strtolower(GetConfig("AGREE_DISCLAIMER", "'YES' to agree to the disclaimer, type anything else to skip future SQL imports")) == "yes")
@@ -278,27 +286,60 @@ function ProcessSQLFiles($db_files, $db_directory)
 		}
 	}
 }
-function ProcessPatchList($histories, $directory, $module)
+function ProcessPatchList($histories, $directory, $module, $newOnly = false)
 {
-	foreach ($histories as $history)
+	$entries = array();
+	if ($newOnly)
 	{
-		$patch = GetPatch($history['sha'], $module);
-		if (ExecuteCmd("cd  ". escapeshellarg($directory) . " && git apply --whitespace=fix --check " . escapeshellarg($patch)) !== 0)
-			status(escapeshellarg($patch). " Patch does not apply: the source code files might be different.", null, "red");
+		$home_dir = ParseDirectory(GetConfig("HISTORY_DIRECTORY"));
+		$entry_name = md5($directory);
+		$entry_path = $home_dir."/".$entry_name;
+		if (!is_dir($home_dir))
+		{
+			if (is_file($home_dir))
+			{
+				status("FATAL: A file already exists at the specified history directory path. Exiting..", null, "red");
+				exit(1);
+			}
+			status("Creating history directory...", "blue", null);
+			mkdir($home_dir, 0777, true);
+		}
+		if (!is_file($entry_path))
+		{
+			touch($entry_path);
+		}
 		else
 		{
-			$db_directory = rtrim($directory, '/') . "/database/";
-			if (!is_dir($db_directory))
-				mkdir($db_directory);
-			else if (is_file($db_directory)) { status("FATAL: Stopping because ".$db_directory. " is a file. Please remove the file and re-run this script.", null, "red"); exit(1); }
-			$db_files = MonitorDirectory($db_directory);
-			if (ExecuteCmd("cd  ". escapeshellarg($directory) . " && git apply --whitespace=fix " . escapeshellarg($patch)) === 0)
-				status(escapeshellarg($patch). " Patch applied.", null, "green");
-			$db_files = MonitorDirectory($db_directory);
-			ProcessSQLFiles($db_files, $db_directory);
+			$entries = explode(PHP_EOL, file_get_contents($entry_path));
 		}
-		if (GetConfig("REMOVE_PATCHES", "preference to automatically delete patch files when done"))
-			unlink($patch);
+	}
+	foreach ($histories as $history)
+	{
+		if (!in_array($history['sha'], $entries))
+		{
+			$patch = GetPatch($history['sha'], $module);
+			file_put_contents($entry_path, $history['sha'].PHP_EOL, FILE_APPEND);
+			if (ExecuteCmd("cd  ". escapeshellarg($directory) . " && git apply --whitespace=fix --check " . escapeshellarg($patch)) !== 0)
+				status(escapeshellarg($patch). " Patch does not apply: the source code files might be different.", null, "red");
+			else
+			{
+				$db_directory = rtrim($directory, '/') . "/database/";
+				if (!is_dir($db_directory))
+					mkdir($db_directory);
+				else if (is_file($db_directory)) { status("FATAL: Stopping because ".$db_directory. " is a file. Please remove the file and re-run this script.", null, "red"); exit(1); }
+				$db_files = MonitorDirectory($db_directory);
+				if (ExecuteCmd("cd  ". escapeshellarg($directory) . " && git apply --whitespace=fix " . escapeshellarg($patch)) === 0)
+					status(escapeshellarg($patch). " Patch applied.", null, "green");
+				$db_files = MonitorDirectory($db_directory);
+				ProcessSQLFiles($db_files, $db_directory);
+			}
+			if (GetConfig("REMOVE_PATCHES", "preference to automatically delete patch files when done (Y/N)"))
+				unlink($patch);
+		}
+		else
+		{
+			status("Skipping " . $history['sha'] . " as it was previously applied...", null, "blue");
+		}
 	}
 }
 function Prompt($message)
@@ -321,13 +362,13 @@ if ($histories) //If there are available patches
 	ShowHistory($histories); //Display available patches to user
 askOption:
 	$option = strtolower(GetConfig("PATCH_NUMBER", "a patch number to apply; type sequence from patches above, type \"lN\" to apply last N patches, or type \"all\" to apply all in order (recommended)")); //Ask user which patch to apply
-	if (!(is_numeric($option) && (int)$option <= count($histories) && (int)$option > 0 ) && $option != "all" && !preg_match("/l\d+/", $option)) //Ensure valid input
+	if (!(is_numeric($option) && (int)$option <= count($histories) && (int)$option > 0 ) && $option != "all" && $option != "new" && !preg_match("/l\d+/", $option)) //Ensure valid input
 	{
 		SetConfig("PATCH_NUMBER", "");
 		goto askOption;
 	}
 	/* Get directory where the patches apply */
-	$directory = GetConfig("DIRECTORY_PATH", "path to target directory");
+	$directory = ParseDirectory(GetConfig("DIRECTORY_PATH", "path to target directory"));
 	while (!is_dir($directory)) //Insist on a valid directory path
 	{
 		SetConfig("DIRECTORY_PATH", "");
@@ -338,12 +379,12 @@ askOption:
 	{
 		$histories = array_splice($histories, -$option_args[1]); //Get last N patches
 	}
-	else if ($option != "all") //In case it is not "all"; $option is always in lower case so conversion to lower case is not necessary
+	else if ($option != "all" && $option != "new") //In case it is not "all"; $option is always in lower case so conversion to lower case is not necessary
 	{
 		$option -= 1; //Option is used as an index in the $histories array; subtract 1 since it starts from zero
 		$histories = array($histories[$option]); //Get patch at $option
 	}
-	ProcessPatchList($histories, $directory, $module);
+	ProcessPatchList($histories, $directory, $module, $option == "new");
 }
 else
 {

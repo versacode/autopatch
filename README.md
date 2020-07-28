@@ -1,4 +1,4 @@
-# Autopatch v1.01
+# Autopatch v1.02
 
 Retrieve patches from the versacode API and automatically apply them to your versacode software.
 
@@ -30,10 +30,11 @@ The `$config` parameter can be setup to avoid providing details interactively. T
 | ------ | ------ | ------ | 
 | API_SERVER | versacode API server endpoint | https://account.versacode.org/api/ |
 | API_KEY | Your versacode API key | - |
+| HISTORY_DIRECTORY | Used by autopatch to store previously applied patches| `~/.autopatchvc/` |
 | PROJECT_ID | Your versacode project ID | - |
 | REMOVE_PATCHES | Remove patches after processing/importing | `true`; `false` |
 | DIRECTORY_PATH | Path to target directory where patches will be applied | - |
-| PATCH_NUMBER | Patch file(s) to apply | `N`: sequence number of patch; `lN`: last N patches; `all`: all patches |
+| PATCH_NUMBER | Patch file(s) to apply | `N`: sequence number of patch; `lN`: last N patches; `new`: patches that were not applied before by autopatch; `all`: all patches |
 | APPLY_SQL | Import SQL files | `true`; `false` |
 | AGREE_DISCLAIMER | Agree to SQL imports disclaimer | `true`; `false` |
 | MYSQL_HOST | MySQL host | Ex: `localhost` |
