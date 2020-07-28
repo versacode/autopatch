@@ -191,7 +191,7 @@ function GetHistory($module)
 function ParseDirectory($dir)
 {
 	$home_dir = strtoupper(substr(PHP_OS, 0, 3)) === 'WIN'? getenv("HOMEPATH") : getenv("HOME");
-	return realpath(str_replace("~", $home_dir, $dir));
+	return realpath(str_replace("~", $home_dir, $dir))? realpath(str_replace("~", $home_dir, $dir)) : str_replace("~", $home_dir, $dir);
 }
 function ExecuteCmd($cmd)
 {
@@ -291,18 +291,18 @@ function ProcessPatchList($histories, $directory, $module, $newOnly = false)
 	$entries = array();
 	if ($newOnly)
 	{
-		$home_dir = ParseDirectory(GetConfig("HISTORY_DIRECTORY"));
+		$hist_directory = ParseDirectory(GetConfig("HISTORY_DIRECTORY"));
 		$entry_name = md5($directory);
-		$entry_path = $home_dir."/".$entry_name;
-		if (!is_dir($home_dir))
+		$entry_path = $hist_directory."/".$entry_name;
+		if (!is_dir($hist_directory))
 		{
-			if (is_file($home_dir))
+			if (is_file($hist_directory))
 			{
 				status("FATAL: A file already exists at the specified history directory path. Exiting..", null, "red");
 				exit(1);
 			}
 			status("Creating history directory...", "blue", null);
-			mkdir($home_dir, 0777, true);
+			mkdir($hist_directory, 0777, true);
 		}
 		if (!is_file($entry_path))
 		{
